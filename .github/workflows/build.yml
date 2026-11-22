@@ -98,7 +98,8 @@ jobs:
         run: ./spc doctor --auto-fix
 
       - name: Download sources
-        run: ./spc download --with-php="$V" --for-extensions="$EXTS" --prefer-pre-built --retry=3
+        # The cache can hold another version's PHP source; always fetch the one this job builds.
+        run: ./spc download --with-php="$V" --for-extensions="$EXTS" --prefer-pre-built --retry=3 --ignore-cache-sources=php-src
 
       - name: Build
         run: ./spc build "$EXTS" --build-cli --build-fpm --with-suggested-libs --debug
