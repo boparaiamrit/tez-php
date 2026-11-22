@@ -80,6 +80,8 @@ jobs:
         run: |
           exts=$(tr -d ' \n' < extensions.txt)
           drop() { exts=$(echo "$exts" | tr ',' '\n' | grep -vE "$1" | paste -sd, -); }
+          # Swoole 6.2 needs PHP 8.2 or newer.
+          case "$V" in 8.1.*) drop '^swoole' ;; esac
           # PHP 8.4 moved imap out of core (to PECL); static-php-cli 2.8.5 builds it only from core.
           case "$V" in 8.1.*|8.2.*|8.3.*) ;; *) drop '^imap$' ;; esac
           echo "EXTS=$exts" >> "$GITHUB_ENV"
@@ -143,7 +145,7 @@ jobs:
           [ "$got" = "$V" ] || { echo "built PHP $got, wanted $V"; exit 1; }
           "$B/php" -r '
             $need = ["pdo_pgsql", "pgsql", "pdo_mysql", "pdo_sqlite", "mysqli", "redis", "intl", "gd", "imagick", "mbstring", "Zend OPcache", "pcntl", "posix", "sodium", "zip", "curl", "openssl"];
-            if (version_compare(PHP_VERSION, "8.1", ">=")) { $need[] = "swoole"; }
+            if (version_compare(PHP_VERSION, "8.2", ">=")) { $need[] = "swoole"; }
             $missing = array_values(array_filter($need, fn ($e) => !extension_loaded($e)));
             if ($missing) { fwrite(STDERR, "missing: " . implode(", ", $missing) . "\n"); exit(1); }
             echo count(get_loaded_extensions()), " extensions; PDO drivers: ", implode(", ", PDO::getAvailableDrivers()), "\n";'

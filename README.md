@@ -18,6 +18,7 @@ These builds use the same extensions as the bulk set, with two changes:
 
 - `pdo_pgsql` and `pdo_sqlite` are PHP's own drivers, not Swoole's hooks.
 - PHP 8.4 and 8.5 have no `imap`: PHP moved it out of core in 8.4.
+- PHP 8.1 has no Swoole: Swoole 6.2 needs PHP 8.2 or newer.
 
 Versions built: PHP 8.1 to 8.5. PHP 8.0 (end of life since 2023) does not compile against current
 libxml2, so tez uses static-php-cli's 8.0 build for it.
@@ -25,7 +26,7 @@ libxml2, so tez uses static-php-cli's 8.0 build for it.
 A run compiles only PHP: the ~40 libraries (ICU, ImageMagick, OpenSSL and so on) are cached
 between runs, per static-php-cli version and extension set.
 
-Swoole itself is included, so Octane works. The full list is in
+Swoole is included from PHP 8.2, so Octane works there. The full list is in
 [`extensions.txt`](extensions.txt).
 
 ## What is tested
