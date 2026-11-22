@@ -64,6 +64,8 @@ jobs:
     env:
       V: ${{ matrix.version }}
       ARCH: aarch64
+      # static-php-cli fetches some tools and sources through GitHub's API, which limits anonymous calls.
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 
@@ -77,8 +79,11 @@ jobs:
       - name: Extensions for this version
         run: |
           exts=$(tr -d ' \n' < extensions.txt)
+          drop() { exts=$(echo "$exts" | tr ',' '\n' | grep -vE "$1" | paste -sd, -); }
           # Swoole 6 (and Laravel Octane) need PHP 8.1 or newer.
-          case "$V" in 8.0.*) exts=$(echo "$exts" | tr ',' '\n' | grep -vE '^swoole' | paste -sd, -) ;; esac
+          case "$V" in 8.0.*) drop '^swoole' ;; esac
+          # PHP 8.4 moved imap out of core (to PECL); static-php-cli 2.8.5 builds it only from core.
+          case "$V" in 8.0.*|8.1.*|8.2.*|8.3.*) ;; *) drop '^imap$' ;; esac
           echo "EXTS=$exts" >> "$GITHUB_ENV"
           echo "$exts"
 
@@ -93,12 +98,20 @@ jobs:
         run: ./spc doctor --auto-fix
 
       - name: Download sources
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: ./spc download --with-php="$V" --for-extensions="$EXTS" --prefer-pre-built --retry=3
 
       - name: Build
-        run: ./spc build "$EXTS" --build-cli --build-fpm --with-suggested-libs
+        run: ./spc build "$EXTS" --build-cli --build-fpm --with-suggested-libs --debug
+
+      - name: Keep the build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.version }}
+          path: |
+            log/
+            source/php-src/config.log
+          if-no-files-found: ignore
 
       - name: Sign
         run: |
