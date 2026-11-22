@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       versions:
-        description: "PHP versions, e.g. `8.4` (newest patch) or `8.4.20` (exact). Empty: the newest patch of 8.0 to 8.5."
+        description: "PHP versions, e.g. `8.4` (newest patch) or `8.4.20` (exact). Empty: the newest patch of 8.1 to 8.5."
         required: false
         default: ""
       force:
@@ -80,12 +80,15 @@ jobs:
         run: |
           exts=$(tr -d ' \n' < extensions.txt)
           drop() { exts=$(echo "$exts" | tr ',' '\n' | grep -vE "$1" | paste -sd, -); }
-          # Swoole 6 (and Laravel Octane) need PHP 8.1 or newer.
-          case "$V" in 8.0.*) drop '^swoole' ;; esac
           # PHP 8.4 moved imap out of core (to PECL); static-php-cli 2.8.5 builds it only from core.
-          case "$V" in 8.0.*|8.1.*|8.2.*|8.3.*) ;; *) drop '^imap$' ;; esac
+          case "$V" in 8.1.*|8.2.*|8.3.*) ;; *) drop '^imap$' ;; esac
           echo "EXTS=$exts" >> "$GITHUB_ENV"
           echo "$exts"
+          # PHP 8.1's bcmath still has old-style (K&R) C function definitions, which this clang
+          # rejects by default; build PHP's own C code as C17. Libraries are not affected.
+          case "$V" in 8.1.*) echo "SPC_CMD_VAR_PHP_MAKE_EXTRA_CFLAGS=-g -fstack-protector-strong -fpic -fpie -Werror=unknown-warning-option --target=arm64-apple-darwin -Os -Wno-strict-prototypes -std=gnu17" >> "$GITHUB_ENV" ;; esac
+          # Versions with the same extensions share one cache of compiled libraries.
+          echo "LIBKEY=spc-libs-$SPC_VERSION-macos15-$(echo "$exts" | shasum | cut -c1-12)" >> "$GITHUB_ENV"
 
       - uses: actions/cache@v4
         with:
@@ -93,6 +96,16 @@ jobs:
           key: spc-downloads-${{ env.SPC_VERSION }}-${{ matrix.version }}-${{ hashFiles('extensions.txt') }}
           restore-keys: |
             spc-downloads-${{ env.SPC_VERSION }}-
+
+      # ICU, ImageMagick, OpenSSL and the other ~40 libraries take most of a build. static-php-cli
+      # skips a library whose files are already in buildroot, so a cached buildroot means only PHP
+      # itself is compiled.
+      - name: Restore compiled libraries
+        id: libs
+        uses: actions/cache/restore@v4
+        with:
+          path: buildroot
+          key: ${{ env.LIBKEY }}
 
       - name: Build tools
         run: ./spc doctor --auto-fix
@@ -176,6 +189,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$RELEASE" out/* --clobber -R "$GITHUB_REPOSITORY"
+
+      - name: Keep only the libraries
+        if: steps.libs.outputs.cache-hit != 'true'
+        # PHP's own binaries, headers and modules are version-specific; the next version builds its own.
+        run: rm -rf buildroot/bin buildroot/include/php buildroot/lib/php buildroot/modules
+
+      - name: Save compiled libraries
+        if: steps.libs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: buildroot
+          key: ${{ env.LIBKEY }}
 
   index:
     needs: build

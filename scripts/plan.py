@@ -11,7 +11,7 @@ import re
 import sys
 import urllib.request
 
-MINORS = ["8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+MINORS = ["8.1", "8.2", "8.3", "8.4", "8.5"]
 
 
 def fetch_json(url):
